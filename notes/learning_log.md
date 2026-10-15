@@ -1,6 +1,6 @@
 # Learning log
 
-## D1 Foundation (13 Oct 2026)
+## D1 Foundation 
 
 **Built**
 - Catalog dld, schemas raw/stg/core/mart/meta, volumes landing and checkpoints.
@@ -20,7 +20,7 @@
 - Managed vs external tables
 - Why a migration must never be edited after it runs
 
-## D2 Ingestion (13 Oct 2026)
+## D2 Ingestion 
 
 **Built**
 - meta.file_registry (SHA-256 per file) and meta.load_log.
@@ -48,7 +48,7 @@
 - Why raw columns are all text
 - Why split files are never merged first
 
-## D3 Masters and crosswalk (14 Oct 2026)
+## D3 Masters and crosswalk 
 
 **Built**
 - dim_area (301 + 2), dim_developer (2,375), dim_project (3,656), dim_building (446,538), all keys unique,
@@ -71,7 +71,7 @@
 - Why a bad key is never a dropped row (-1 / -2 keep the row and show the problem)
 - When fuzzy matching may only suggest, never decide
 
-## D4 Staging (15 Oct 2026)
+## D4 Staging 
 
 **Built**
 - stg.transaction: bulk (e1 + e2) and daily conformed into one typed table (DATE, TIMESTAMP_NTZ, DECIMAL).
@@ -98,7 +98,7 @@
 - Quarantine (cannot be read) vs data quality rules in D7 (can be read but makes no sense)
 - Why TIMESTAMP_NTZ for local Dubai times
 
-## D5 Star schema (16 Oct 2026)
+## D5 Star schema 
 
 **Built**
 - core.fact_transaction (SCD1, current state) and core.fact_transaction_history (SCD2, every version),
