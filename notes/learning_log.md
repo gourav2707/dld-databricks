@@ -98,7 +98,7 @@
 - Quarantine (cannot be read) vs data quality rules in D7 (can be read but makes no sense)
 - Why TIMESTAMP_NTZ for local Dubai times
 
-## D5 Star schema (15 Oct 2026)
+## D5 Star schema (16 Oct 2026)
 
 **Built**
 - core.fact_transaction (SCD1, current state) and core.fact_transaction_history (SCD2, every version),
