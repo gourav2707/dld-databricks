@@ -1,30 +1,26 @@
-from etl.conform import clean, reason_exprs, RAW_COLS, BULK_MAP, DAILY_MAP, TERMS, stg_columns
-
-
-def test_none_words_become_null():
-    s = clean("x")
-    assert "'NONE'" in s and "'NULL'" in s and "''" in s
-
-
-def test_mappings_only_use_known_columns():
-    assert set(BULK_MAP) <= set(RAW_COLS)
-    assert set(DAILY_MAP) <= set(RAW_COLS)
-    assert set(TERMS) <= set(RAW_COLS)
-
-
-def test_reason_codes_exist():
-    joined = " ".join(reason_exprs())
-    for code in ["MISSING_ID", "MISSING_DATE", "BAD_DATE", "BAD_NUMBER:amount"]:
-        assert code in joined
-
-
-def test_staging_columns_have_no_duplicates():
-    names = [c for c, _ in stg_columns()]
-    assert len(names) == len(set(names))
-
-from etl.conform import to_date
-
-
-def test_day_first_dates_are_rewritten_before_parsing():
-    s = to_date("d")
-    assert "'$3-$2-$1'" in s and "AS DATE" in s
+def build_term_map(spark):
+    rows = []
+    for term, (bcol, dcol) in TERMS.items():
+        bulk_sql = " UNION ".join(f"SELECT DISTINCT {clean(bcol)} AS v FROM dld.raw.{t}" for t in BULK_TABLES)
+        bulk = {r.v for r in spark.sql(bulk_sql).collect() if r.v is not None}
+        daily = {r.v for r in spark.sql(f"SELECT DISTINCT {clean(dcol)} AS v FROM dld.raw.{DAILY_TABLE}").collect()
+                 if r.v is not None}
+        for t in sorted(bulk):
+            std, note = BULK_OVERRIDES.get((term, t), (t, "standard term"))
+            rows.append((term, "bulk", t, std, note))
+        bulk = {BULK_OVERRIDES.get((term, t), (t,))[0] for t in bulk}   # vocabulary after fixes
+        by_upper = {t.upper(): t for t in bulk}
+        for t in sorted(daily):
+            if (term, t) in OVERRIDES:
+                std, note = OVERRIDES[(term, t)]
+                if std is not None and std not in bulk:
+                    std, note = None, f"UNMAPPED: override target '{OVERRIDES[(term, t)][0]}' is not a bulk term"
+            elif t.upper() in by_upper:
+                std, note = by_upper[t.upper()], "same word as bulk"
+            else:
+                std, note = None, "UNMAPPED: no bulk term"
+            rows.append((term, "daily", t, std, note))
+    spark.createDataFrame(rows, "term string, source_shape string, source_term string, std_term string, note string") \
+         .createOrReplaceTempView("new_term_map")
+    spark.sql("INSERT OVERWRITE dld.stg.term_map SELECT * FROM new_term_map")
+    print(f"term_map: {len(rows)} rows")

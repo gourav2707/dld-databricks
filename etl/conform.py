@@ -21,12 +21,14 @@ def clean(col):
 def to_int(col):
     return f"try_cast(regexp_replace({col}, '[.]0+$', '') AS INT)"
 
+
 DMY = "'^([0-9]{2})-([0-9]{2})-([0-9]{4})'"
 
 
 def to_date(col):
     # e1 writes dd-MM-yyyy, e2 and daily write yyyy-MM-dd: turn dd-MM-yyyy into yyyy-MM-dd first
     return "try_cast(regexp_replace(" + col + ", " + DMY + ", '$3-$2-$1') AS DATE)"
+
 
 RAW_COLS = ["transaction_key", "date_raw", "trans_group", "procedure_name", "reg_type", "is_free_hold",
             "property_usage", "property_type", "property_sub_type", "rooms", "area_id_raw", "area_en",
@@ -74,6 +76,11 @@ OVERRIDES = {
     ("property_sub_type", "Residential"): (None, "usage word found in daily sub-type column"),
 }
 
+# bulk is the standard vocabulary, except where the bulk itself is wrong
+BULK_OVERRIDES = {
+    ("property_usage", "أخرى"): ("Other", "Arabic word for Other found in the English column (e2)"),
+}
+
 NUMS = {"amount": ("amount_raw", "DECIMAL(18,2)"), "procedure_area": ("procedure_area_raw", "DECIMAL(14,2)"),
         "actual_area": ("actual_area_raw", "DECIMAL(14,2)"),
         "meter_sale_price": ("meter_sale_price_raw", "DECIMAL(18,2)"),
@@ -97,7 +104,7 @@ def shape_select(shape, table, mapping):
 def reason_exprs():
     r = ["CASE WHEN s.transaction_key IS NULL THEN 'MISSING_ID' END",
          "CASE WHEN s.date_raw IS NULL THEN 'MISSING_DATE' END",
-          f"CASE WHEN s.date_raw IS NOT NULL AND {to_date('s.date_raw')} IS NULL THEN 'BAD_DATE' END"]
+         f"CASE WHEN s.date_raw IS NOT NULL AND {to_date('s.date_raw')} IS NULL THEN 'BAD_DATE' END"]
     for name, (raw, typ) in NUMS.items():
         r.append(f"CASE WHEN s.{raw} IS NOT NULL AND try_cast(s.{raw} AS {typ}) IS NULL THEN 'BAD_NUMBER:{name}' END")
     for name, raw in INTS.items():
@@ -112,7 +119,10 @@ def build_term_map(spark):
         bulk = {r.v for r in spark.sql(bulk_sql).collect() if r.v is not None}
         daily = {r.v for r in spark.sql(f"SELECT DISTINCT {clean(dcol)} AS v FROM dld.raw.{DAILY_TABLE}").collect()
                  if r.v is not None}
-        rows += [(term, "bulk", t, t, "standard term") for t in sorted(bulk)]
+        for t in sorted(bulk):
+            std, note = BULK_OVERRIDES.get((term, t), (t, "standard term"))
+            rows.append((term, "bulk", t, std, note))
+        bulk = {BULK_OVERRIDES.get((term, t), (t,))[0] for t in bulk}   # vocabulary after fixes
         by_upper = {t.upper(): t for t in bulk}
         for t in sorted(daily):
             if (term, t) in OVERRIDES:
